@@ -1,0 +1,10 @@
+[project]
+name = "ai-voice"
+version = "0.1.0"
+description = "QZT 16GB + ローカルWhisper + Notion による日常会話ライフログシステム"
+requires-python = ">=3.9"
+dependencies = [
+    "openai-whisper==20250625",
+    "notion-client==3.1.0",
+    "python-dotenv==1.2.1",
+]
