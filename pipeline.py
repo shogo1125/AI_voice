@@ -32,9 +32,22 @@ ARCHIVE_DIR = BASE_DIR / "archive"   # 処理済みWAVの保管先
 WHISPER_MODEL_SIZE = "small"          # tiny / base / small / medium / large
 CHUNK_DURATION_SEC = 900              # 15分（900秒）ごとに分割
 
+
+def _require_env(key: str) -> str:
+    """必須環境変数を取得する。未設定の場合は分かりやすいエラーで終了する。"""
+    value = os.environ.get(key)
+    if not value:
+        print(
+            f"エラー: 環境変数 {key} が設定されていません。\n"
+            f".env.example を参考に .env ファイルを作成してください。"
+        )
+        raise SystemExit(1)
+    return value
+
+
 # Notion設定（.envから読み込み）
-NOTION_TOKEN = os.environ["NOTION_TOKEN"]
-NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
+NOTION_TOKEN = _require_env("NOTION_TOKEN")
+NOTION_DATABASE_ID = _require_env("NOTION_DATABASE_ID")
 NOTION_TITLE_PROP = os.environ.get("NOTION_TITLE_PROP", "名前")
 
 notion = Client(auth=NOTION_TOKEN)
