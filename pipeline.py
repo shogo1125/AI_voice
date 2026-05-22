@@ -29,7 +29,7 @@ BASE_DIR = Path(__file__).parent
 INCOMING_DIR = BASE_DIR / "incoming"  # QZTからコピーしたWAVを置くフォルダ
 ARCHIVE_DIR = BASE_DIR / "archive"   # 処理済みWAVの保管先
 
-WHISPER_MODEL_SIZE = "small"          # tiny / base / small / medium / large
+WHISPER_MODEL_SIZE = "small"          # tiny / base / small / medium / large-v3 / turbo
 CHUNK_DURATION_SEC = 900              # 15分（900秒）ごとに分割
 
 

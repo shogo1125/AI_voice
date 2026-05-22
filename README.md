@@ -45,11 +45,11 @@ uv sync
 2. **「+ 新規コネクト」** をクリック（プライベート / 内部API接続を作成）
 3. 名前（例: `AI_voice`）と **インストール可能なワークスペース** を設定
 4. **機能（Capabilities）** で次を有効にする:
-   - コンテンツを読み取る
-   - コンテンツを更新する
-   - **コンテンツを挿入**（ページ作成に必須）
-5. 作成したコネクトの **「設定」** タブ → **「インテグレーショントークン」** → **アクセストークン** をコピー  
-   - `ntn_` または `secret_` で始まる文字列（どちらも同じ用途）
+  - コンテンツを読み取る
+  - コンテンツを更新する
+  - **コンテンツを挿入**（ページ作成に必須）
+5. 作成したコネクトの **「設定」** タブ → **「インテグレーショントークン」** → **アクセストークン** をコピー
+  - `ntn_` または `secret_` で始まる文字列（どちらも同じ用途）
 
 #### 4-2. Notionデータベースを作成
 
@@ -189,18 +189,45 @@ AI_voice/
 `pipeline.py` の先頭の1行を変更するだけです。
 
 ```python
-WHISPER_MODEL_SIZE = "small"  # tiny / base / small / medium / large
+WHISPER_MODEL_SIZE = "small"  # tiny / base / small / medium / large-v3 / turbo
 ```
 
+### Relative speed（相対速度）とは
 
-| モデル    | 1時間の処理時間（CPU） | 精度    | サイズ   |
-| ------ | ------------- | ----- | ----- |
-| tiny   | 約5分           | 低い    | 75MB  |
-| base   | 約10分          | 普通    | 150MB |
-| small  | 約20分          | 良い    | 500MB |
-| medium | 約35分          | とても良い | 1.5GB |
-| large  | 約60分〜         | 最高    | 3GB   |
+OpenAI公式では **`large` を 1倍（基準）** としたとき、他モデルが何倍速いかを示します。
 
+| Relative speed | 意味 |
+| --- | --- |
+| ~10x（tiny） | large の約10倍速 |
+| ~8x（turbo） | large の約8倍速 |
+| ~4x（small） | large の約4倍速 |
+| 1x（large） | 基準 |
+
+計測は **NVIDIA A100・英語** が前提です。Mac の CPU のみで日本語を処理する場合は目安であり、実際の時間は環境によって変わります。
+
+### モデル比較（日本語・多言語向け）
+
+| モデル | パラメータ | Relative speed | ダウンロード | 1時間の処理目安（Mac CPU） | 精度（日本語） | VRAM目安 |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| tiny | 39M | ~10x | 72 MB | 約6分 | 低い | ~1 GB |
+| base | 74M | ~7x | 139 MB | 約9分 | 普通 | ~1 GB |
+| small | 244M | ~4x | 461 MB | 約15〜20分 | 良い | ~2 GB |
+| medium | 769M | ~2x | 1.5 GB | 約30〜35分 | とても良い | ~5 GB |
+| **turbo** | 809M | **~8x** | 1.5 GB | 約8〜10分 | large-v2 相当 | ~6 GB |
+| large-v3 | 1550M | 1x | 2.9 GB | 約60分〜 | 最高 | ~10 GB |
+
+**turbo**（正式名 `large-v3-turbo`）は 2024年9月に追加された高速モデルです。large-v3 のエンコーダに、層数の少ないデコーダを組み合わせて速度を上げています。翻訳タスクは苦手なため、本パイプラインのような **文字起こし専用** 用途向きです。
+
+### 選び方の目安
+
+| 目的 | おすすめモデル |
+| --- | --- |
+| バランス重視（デフォルト） | **small** |
+| 速度優先 | **turbo** |
+| 精度最優先 | **large-v3** |
+| 軽く試す | **base** / **tiny** |
+
+参考: [Zenn: 非エンジニアが自作AIボイスレコーダー](https://zenn.dev/mark_akiba/articles/b7be132ee9bbc7)、[OpenAI Whisper README（モデル一覧）](https://github.com/openai/whisper#available-models-and-languages)
 
 ---
 
@@ -234,3 +261,20 @@ NOTION_TITLE_PROP=名前  # 「名前」の部分をエラーメッセージの�
 ls -la .env
 ```
 
+### Whisperモデルのダウンロードが止まる・遅い
+
+**確認:**
+
+```bash
+ls -lh ~/.cache/whisper/small.pt
+# 461M 程度あれば完了。199M など小さい場合は未完了
+```
+
+**対処（レジューム再開）:** 壊れたファイルを残したまま、curlで続きからダウンロードできます。
+
+```bash
+curl -L -C - -o ~/.cache/whisper/small.pt \
+  "https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt"
+```
+
+完了後、再度 `uv run pipeline.py` を実行してください。2回目以降はダウンロード不要で、ロードは数秒程度です。
