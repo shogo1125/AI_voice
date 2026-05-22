@@ -52,6 +52,30 @@ NOTION_TITLE_PROP = os.environ.get("NOTION_TITLE_PROP", "名前")
 
 notion = Client(auth=NOTION_TOKEN)
 
+# データベースIDから data_source_id を解決（Notion API 2025-09 以降は必須）
+_data_source_id_cache: Optional[str] = None
+
+
+def _get_data_source_id() -> str:
+    """
+    NOTION_DATABASE_ID から data_source_id を取得する。
+    新しいNotion APIではクエリ・ページ作成に data_source_id が必要。
+    """
+    global _data_source_id_cache
+    if _data_source_id_cache:
+        return _data_source_id_cache
+
+    db = notion.databases.retrieve(database_id=NOTION_DATABASE_ID)
+    sources = db.get("data_sources", [])
+    if not sources:
+        raise RuntimeError(
+            "データベースに data_source が見つかりません。"
+            "Notionでデータベースを開き直すか、接続設定を確認してください。"
+        )
+    _data_source_id_cache = sources[0]["id"]
+    return _data_source_id_cache
+
+
 # =============================================================================
 # WAVファイル検出
 # =============================================================================
@@ -181,8 +205,8 @@ def _append_blocks_in_batches(page_id: str, blocks: list[dict]) -> None:
 
 def _find_existing_page(date_str: str) -> Optional[str]:
     """同じ日付のNotionページが既に存在するか検索し、存在すればpage_idを返す"""
-    response = notion.databases.query(
-        database_id=NOTION_DATABASE_ID,
+    response = notion.data_sources.query(
+        data_source_id=_get_data_source_id(),
         filter={
             "property": NOTION_TITLE_PROP,
             "title": {"equals": f"ライフログ {date_str}"},
@@ -216,7 +240,7 @@ def save_to_notion(date_str: str, transcription_results: list[dict]) -> str:
         print(f"  Notionにページを作成中: ライフログ {date_str}")
         try:
             page = notion.pages.create(
-                parent={"database_id": NOTION_DATABASE_ID},
+                parent={"data_source_id": _get_data_source_id()},
                 properties={
                     NOTION_TITLE_PROP: {
                         "title": [{"text": {"content": f"ライフログ {date_str}"}}],
