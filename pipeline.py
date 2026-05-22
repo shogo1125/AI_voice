@@ -89,12 +89,17 @@ def find_wav_files() -> list[Path]:
 def extract_date(wav_path: Path) -> str:
     """
     QZTのファイル名から録音日を取得する。
-    例: 2026-02-20-21-06-17.WAV → "2026-02-20"
+    対応形式:
+      - 2026-02-20-21-06-17.WAV（ハイフン区切り）
+      - 20260522121858.WAV（連続数字）
     ファイル名が不明な形式の場合は実行日の日付を返す。
     """
     m = re.search(r"(\d{4}-\d{2}-\d{2})-\d{2}-\d{2}-\d{2}", wav_path.stem)
     if m:
         return m.group(1)
+    m = re.search(r"^(\d{4})(\d{2})(\d{2})", wav_path.stem)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
     return datetime.now().strftime("%Y-%m-%d")
 
 
@@ -170,12 +175,31 @@ def _make_paragraph_block(text: str) -> dict:
     }
 
 
-def _build_blocks(transcription_results: list[dict]) -> list[dict]:
+def _make_callout_block(message: str) -> dict:
+    """ページ本文の先頭に置く案内用コールアウトブロック"""
+    return {
+        "object": "block",
+        "type": "callout",
+        "callout": {
+            "rich_text": [{"type": "text", "text": {"content": message}}],
+            "icon": {"type": "emoji", "emoji": "🎙️"},
+        },
+    }
+
+
+def _build_blocks(transcription_results: list[dict], source_name: str = "") -> list[dict]:
     """
     文字起こし結果からNotionブロックのリストを生成する。
-    構成: heading_3（タイムスタンプ）+ paragraph（本文、2000文字上限で分割）
+    構成: callout（案内）+ heading_3（タイムスタンプ）+ paragraph（本文、2000文字上限で分割）
     """
     blocks: list[dict] = []
+    total_chars = sum(len(item["text"]) for item in transcription_results)
+    if source_name or total_chars:
+        label = source_name or "録音"
+        blocks.append(_make_callout_block(
+            f"{label} の文字起こし（{total_chars} 文字）を追加しました。"
+            " データベースの表ではタイトルしか見えません。このページを開くと↓に全文があります。"
+        ))
     for item in transcription_results:
         blocks.append({
             "object": "block",
@@ -216,13 +240,17 @@ def _find_existing_page(date_str: str) -> Optional[str]:
     return results[0]["id"] if results else None
 
 
-def save_to_notion(date_str: str, transcription_results: list[dict]) -> str:
+def save_to_notion(
+    date_str: str,
+    transcription_results: list[dict],
+    source_name: str = "",
+) -> str:
     """
     文字起こし結果をNotionに保存する。
     同じ日付のページが既に存在する場合は追記する。
     戻り値: 作成/更新したページのURL
     """
-    blocks = _build_blocks(transcription_results)
+    blocks = _build_blocks(transcription_results, source_name=source_name)
 
     try:
         existing_page_id = _find_existing_page(date_str)
@@ -315,8 +343,14 @@ def main() -> None:
             transcription_results = transcribe_chunks(chunks, model)
         # tempfile.TemporaryDirectory を抜けるとチャンクは自動削除される
 
-        page_url = save_to_notion(date_str, transcription_results)
+        total_chars = sum(len(r["text"]) for r in transcription_results)
+        page_url = save_to_notion(
+            date_str, transcription_results, source_name=wav_path.name
+        )
         print(f"  Notion保存完了: {page_url}")
+        print(f"  保存文字数: {total_chars} 文字（ページ本文を開いて確認してください）")
+        if total_chars < 20:
+            print("  警告: 文字起こしが極端に短いです。録音内容・音量・Whisperモデルを確認してください。")
 
         archive_wav(wav_path, date_str)
         print()
